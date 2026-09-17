@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pdf-rag</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #212121;
+    --sidebar: #181818;
+    --panel: #2f2f2f;
+    --border: #3d3d3d;
+    --text: #ececec;
+    --muted: #9b9b9b;
+    --accent: #7fb88f;
+    --accent-dim: #4e6e58;
+    --bubble-user: #3a3a3a;
+    --error: #d97757;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ---------- Sidebar ---------- */
+
+  #sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 16px 14px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px 20px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .brand .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .new-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+
+  .new-btn:hover { background: var(--panel); }
+
+  .side-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 0 8px 8px;
+  }
+
+  #doc-card {
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin: 0 4px;
+  }
+
+  #doc-card.active { display: block; }
+
+  #doc-card .doc-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    word-break: break-word;
+  }
+
+  #doc-card .doc-meta {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #doc-card .doc-meta .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .sidebar-empty {
+    padding: 0 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .sidebar-foot {
+    margin-top: auto;
+    padding: 12px 8px 4px;
+    font-size: 11.5px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ---------- Main column ---------- */
+
+  #main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  header .title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  header .title .sub {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 12.5px;
+    margin-left: 8px;
+  }
+
+  header .status-pill {
+    font-size: 11.5px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  header .status-pill .pip {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  header .status-pill.ready .pip { background: var(--accent); }
+  header .status-pill.ready { color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ---------- Empty state (pre-upload) ---------- */
+
+  #empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+  }
+
+  #empty-state h2 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+
+  #empty-state p {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0 0 28px;
+    max-width: 380px;
+  }
+
+  .drop-zone {
+    width: 100%;
+    max-width: 420px;
+    border: 1.5px dashed var(--border);
+    border-radius: 12px;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    transition: border-color 0.15s ease;
+  }
+
+  .drop-zone:hover { border-color: var(--accent); }
+
+  input[type="file"] {
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    max-width: 100%;
+  }
+
+  input[type="file"]::file-selector-button {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: 10px;
+  }
+
+  button.primary {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    background: var(--accent);
+    color: #142218;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 18px;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  button.primary:hover { opacity: 0.88; }
+  button.primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  #upload-status {
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 18px;
+  }
+
+  #upload-status.err { color: var(--error); }
+
+  /* ---------- Chat state (post-upload) ---------- */
+
+  #chat-state {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  #chat-state.active { display: flex; }
+  #empty-state.hidden { display: none; }
+
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  #log:empty::before {
+    content: "Ask anything about the document — answers are grounded in its content.";
+    color: var(--muted);
+    font-size: 13.5px;
+    display: block;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .msg {
+    max-width: 640px;
+    width: 100%;
+    margin: 0 auto;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .msg.user {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .msg.user .bubble {
+    background: var(--bubble-user);
+    border-radius: 16px;
+    padding: 10px 16px;
+    max-width: 80%;
+  }
+
+  .msg.answer .bubble {
+    padding: 2px 0;
+    white-space: pre-wrap;
+    border-left: 2px solid var(--accent-dim);
+    padding-left: 14px;
+  }
+
+  .msg.answer.loading .bubble {
+    color: var(--muted);
+    border-left-color: var(--border);
+  }
+
+  .composer {
+    flex-shrink: 0;
+    padding: 14px 24px 20px;
+  }
+
+  .composer-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 10px 10px 10px 18px;
+  }
+
+  #inputtext {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    resize: none;
+    outline: none;
+    max-height: 140px;
+  }
+
+  #inputtext::placeholder { color: var(--muted); }
+
+  #submitbtn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: #142218;
+    font-size: 15px;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #submitbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .composer-hint {
+    max-width: 640px;
+    margin: 8px auto 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="brand"><span class="dot"></span> pdf-rag</div>
+  <button class="new-btn" id="newbtn">+ New session</button>
+
+  <div class="side-label">Document</div>
+  <div id="doc-card">
+    <div class="doc-name" id="doc-name"></div>
+    <div class="doc-meta"><span class="live-dot"></span> indexed &amp; ready</div>
+  </div>
+  <div class="sidebar-empty" id="sidebar-empty">No document loaded yet. Upload a PDF to start asking questions.</div>
+
+  <div class="sidebar-foot">Local RAG pipeline &middot; Chroma + Groq</div>
+</div>
+
+<div id="main">
+  <header>
+    <div class="title">Document Q&amp;A <span class="sub" id="header-sub">no document loaded</span></div>
+    <div class="status-pill" id="status-pill"><span class="pip"></span> waiting</div>
+  </header>
+
+  <div id="empty-state">
+    <h2>Ask your document</h2>
+    <p>Upload a PDF and ask questions about it — answers are grounded in the file's own content.</p>
+    <div class="drop-zone">
+      <input type="file" id="file" accept="application/pdf">
+      <button type="button" class="primary" id="uploadbtn">Upload &amp; start</button>
+      <div id="upload-status"></div>
+    </div>
+  </div>
+
+  <div id="chat-state">
+    <div id="log"></div>
+    <div class="composer">
+      <div class="composer-inner">
+        <textarea id="inputtext" rows="1" placeholder="Ask a question about the document..."></textarea>
+        <button type="button" id="submitbtn">&uarr;</button>
+      </div>
+      <div class="composer-hint">Enter to send &middot; Shift+Enter for a new line</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let FileHash = null;
+
+  const emptyState = document.getElementById("empty-state");
+  const chatState = document.getElementById("chat-state");
+  const uploadStatus = document.getElementById("upload-status");
+  const fileInput = document.getElementById("file");
+  const inputBox = document.getElementById("inputtext");
+  const submitbtn = document.getElementById("submitbtn");
+  const log = document.getElementById("log");
+
+  const docCard = document.getElementById("doc-card");
+  const docName = document.getElementById("doc-name");
+  const sidebarEmpty = document.getElementById("sidebar-empty");
+  const headerSub = document.getElementById("header-sub");
+  const statusPill = document.getElementById("status-pill");
+  const newbtn = document.getElementById("newbtn");
+
+  function setUploadStatus(text, isErr) {
+    uploadStatus.textContent = text;
+    uploadStatus.className = isErr ? "err" : "";
+  }
+
+  async function Postdata(formData, displayName) {
+    setUploadStatus("uploading...");
+    try {
+      const response = await fetch("http://127.0.0.1:8000/uploadfile/", {
+        method: "POST",
+        body: formData
+      });
+      if (response.ok) {
+        const data = await response.json();
+        FileHash = data.File_hash;
+
+        docName.textContent = displayName;
+        docCard.classList.add("active");
+        sidebarEmpty.style.display = "none";
+        headerSub.textContent = displayName;
+        statusPill.classList.add("ready");
+        statusPill.innerHTML = '<span class="pip"></span> ready';
+
+        emptyState.classList.add("hidden");
+        chatState.classList.add("active");
+        inputBox.focus();
+      } else {
+        setUploadStatus("upload failed, try again", true);
+      }
+    } catch (e) {
+      setUploadStatus("could not reach server", true);
+    }
+  }
+
+  document.getElementById("uploadbtn").addEventListener("click", () => {
+    const selectedFile = fileInput.files[0];
+    if (!selectedFile) {
+      setUploadStatus("choose a file first", true);
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    Postdata(formData, selectedFile.name);
+  });
+
+  newbtn.addEventListener("click", () => {
+    FileHash = null;
+    log.innerHTML = "";
+    fileInput.value = "";
+    setUploadStatus("");
+    docCard.classList.remove("active");
+    sidebarEmpty.style.display = "block";
+    headerSub.textContent = "no document loaded";
+    statusPill.classList.remove("ready");
+    statusPill.innerHTML = '<span class="pip"></span> waiting';
+    chatState.classList.remove("active");
+    emptyState.classList.remove("hidden");
+  });
+
+  function addUserMessage(text) {
+    const msg = document.createElement("div");
+    msg.className = "msg user";
+    msg.innerHTML = `<div class="bubble"></div>`;
+    msg.querySelector(".bubble").textContent = text;
+    log.appendChild(msg);
+  }
+
+  function addAnswerMessage(loadingText) {
+    const msg = document.createElement("div");
+    msg.className = "msg answer loading";
+    msg.innerHTML = `<div class="bubble"></div>`;
+    msg.querySelector(".bubble").textContent = loadingText;
+    log.appendChild(msg);
+    return msg;
+  }
+
+  let pendingAnswerMsg = null;
+
+  async function PostQuestion(Question) {
+    const response = await fetch("http://127.0.0.1:8000/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Question)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      pendingAnswerMsg.classList.remove("loading");
+      pendingAnswerMsg.querySelector(".bubble").textContent = data.Response;
+    } else {
+      pendingAnswerMsg.classList.remove("loading");
+      pendingAnswerMsg.querySelector(".bubble").textContent = "error getting answer";
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function ask() {
+    const questionText = inputBox.value.trim();
+    if (!questionText) return;
+    addUserMessage(questionText);
+    pendingAnswerMsg = addAnswerMessage("thinking...");
+    log.scrollTop = log.scrollHeight;
+    inputBox.value = "";
+    inputBox.style.height = "auto";
+    PostQuestion({ question: questionText, hash: FileHash });
+  }
+
+  submitbtn.addEventListener("click", ask);
+
+  inputBox.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      ask();
+    }
+  });
+
+  inputBox.addEventListener("input", () => {
+    inputBox.style.height = "auto";
+    inputBox.style.height = inputBox.scrollHeight + "px";
+  });
+</script>
+</body>
+</html>
