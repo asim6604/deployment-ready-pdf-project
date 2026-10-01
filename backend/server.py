@@ -6,6 +6,7 @@ from vector import Vector, Get_Answer
 from groq import Groq
 from dotenv import load_dotenv
 from main import Api
+from tavily import TavilyClient
 import json
 import io
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 client = Groq()
+tavily_client = TavilyClient()
 
 tools = [
     {
@@ -31,7 +33,25 @@ tools = [
                 "required": ["query"]
             }
         }
+    },
+   {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "description": "If the question is out of the pdf and you needed a little bit of help to search online, you can use this tool to get online info",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query for the web"
+                }
+            },
+            "required": ["query"]
+        }
     }
+}
+
 ]
 
 
@@ -48,6 +68,8 @@ origins = [
     "http://localhost",
     "http://localhost:8080",
     "http://127.0.0.1:5502",
+    "http://127.0.0.1:5500",
+    
 ]
 
 app.add_middleware(
@@ -57,15 +79,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+async def Web_search(query:str):
+    try:
+        print("hit")
+        result=""
 
+        response= tavily_client.search(
+            query=query,
+            search_depth="basic",
+            max_results=5,
+            include_answer=True
+        )
+        for i in response.get("results",[]):
+            result += i.get('content', '') + "\n"
+
+        return result
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 def search_docs(query: str, collection_hash: str):
     embed = embedding(query)
     response = Get_Answer(embed, collection_hash)
     return response["documents"][0]
 
-
-def run_agent(question: str, collection_hash: str):
+async def  run_agent(question: str, collection_hash: str):
     messages = [{"role": "user", "content": question}]
     for i in range(5):
         response = client.chat.completions.create(
@@ -79,7 +116,7 @@ def run_agent(question: str, collection_hash: str):
             for tool_call in message.tool_calls:
                 args = json.loads(tool_call.function.arguments)
                 if tool_call.function.name == "search_docs":
-                    print("tool called:", args["query"])
+                    print("tool called:", repr(args["query"]))
                     result = search_docs(
                         query=args["query"], collection_hash=collection_hash
                     )
@@ -89,8 +126,19 @@ def run_agent(question: str, collection_hash: str):
                         "tool_call_id": tool_call.id,
                         "content": result_text,
                     })
+                elif tool_call.function.name=="web_search":
+                    result=await Web_search(args["query"])
+                    result_text=result
+                    messages.append({
+                     "role":"tool",
+                     "tool_call_id":tool_call.id,
+                    "content":result_text
+                    }
+                       
+                    )
         else:
             return message.content
+            
     return "Sorry, I couldn't find a complete answer."
 
 
@@ -107,14 +155,11 @@ async def create_upload_file(file: UploadFile):
 @app.post("/ask")
 async def ask(payload: askRequest):
     try:
-        embed = embedding(payload.question)
-        Response = Get_Answer(embed, payload.hash)
-        Messages = "\n".join(Response["documents"][0])
-        Final = Api(Messages)
-        return {"Response": Final}
+        answer=await run_agent(payload.question,payload.hash)
+        return {"Response": answer}
+        
+       
     except:
         raise HTTPException(status_code=404, detail="Document not found")
 
 
-if __name__ == "__main__":
-    print(run_agent("a question your PDF can answer", "PASTE_HASH_HERE"))

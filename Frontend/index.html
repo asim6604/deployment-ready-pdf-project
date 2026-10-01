@@ -460,7 +460,7 @@
   async function Postdata(formData, displayName) {
     setUploadStatus("uploading...");
     try {
-      const response = await fetch("/uploadfile/", {
+      const response = await fetch("http://127.0.0.1:8000/uploadfile/", {
         method: "POST",
         body: formData
       });
@@ -531,7 +531,7 @@
   let pendingAnswerMsg = null;
 
   async function PostQuestion(Question) {
-    const response = await fetch("/ask", {
+    const response = await fetch("http://127.0.0.1:8000/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(Question)
