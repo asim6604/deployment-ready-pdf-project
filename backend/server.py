@@ -96,6 +96,22 @@ async def Web_search(query:str):
         return result
     except Exception as e:
         print(f"An error occurred: {e}")
+def check_faithfulness(question:str,answer:str,context:list[str])->str:
+    context="\n".join(context)
+    judge_prompt = f"""
+    question:{question}
+    Context from document:
+    {context}
+    
+    Answer given:
+    {answer}
+
+    Does the answer only use information that is actually present in the context above? ...
+    Reply with exactly one word first: "faithful" or "unfaithful", then a one-line reason."""
+    response=client.chat.completion.create(
+         model="openai/gpt-oss-120b",
+    messages=[{"role": "user", "content": judge_prompt}]
+    )
 
 def search_docs(query: str, collection_hash: str):
     embed = embedding(query)
@@ -104,6 +120,7 @@ def search_docs(query: str, collection_hash: str):
 
 async def  run_agent(question: str, collection_hash: str):
     messages = [{"role": "user", "content": question}]
+    retrieved_chunk=[]
     for i in range(5):
         response = client.chat.completions.create(
             model="openai/gpt-oss-120b",
@@ -120,7 +137,9 @@ async def  run_agent(question: str, collection_hash: str):
                     result = search_docs(
                         query=args["query"], collection_hash=collection_hash
                     )
+                    retrieved_chunk.extend(result)
                     result_text = "\n".join(result)
+
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,
@@ -137,7 +156,7 @@ async def  run_agent(question: str, collection_hash: str):
                        
                     )
         else:
-            return message.content
+            return ({"answer":message.content,"context":retrieved_chunk})
             
     return "Sorry, I couldn't find a complete answer."
 

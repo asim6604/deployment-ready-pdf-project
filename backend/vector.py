@@ -26,6 +26,6 @@ def Get_Answer(embeddings,FileObject):
      collection = chroma_client.get_collection(name=FileObject)
      results = collection.query(
         query_embeddings=embeddings,
-        n_results=2
+        n_results=5
 )
      return results
