@@ -79,12 +79,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-async def Web_search(query:str):
+def Web_search(query:str):
     try:
         print("hit")
         result=""
 
-        response= tavily_client.search(
+        response=  tavily_client.search(
             query=query,
             search_depth="basic",
             max_results=5,
@@ -96,6 +96,20 @@ async def Web_search(query:str):
         return result
     except Exception as e:
         print(f"An error occurred: {e}")
+async def get_answer(question: str, collection_hash: str):
+       result = await run_agent(question, collection_hash)
+       verdict=check_faithfulness(question,result["answer"],result["context"])
+       if verdict.lower().startswith("faithful"):
+          return result["answer"]
+       stricter_question = question + "\n\nImportant: only use information explicitly present in the retrieved document content. Do not add any facts, numbers, or details not directly stated there."
+       retry_result =await run_agent(stricter_question, collection_hash)
+       retry_verdict = check_faithfulness(question, retry_result["answer"], retry_result["context"])
+
+       if retry_verdict.lower().startswith("faithful"):
+           return retry_result["answer"]
+       return {"answer": "Sorry, I couldn't find a complete answer."}
+           
+     
 def check_faithfulness(question:str,answer:str,context:list[str])->str:
     context="\n".join(context)
     judge_prompt = f"""
@@ -108,11 +122,13 @@ def check_faithfulness(question:str,answer:str,context:list[str])->str:
 
     Does the answer only use information that is actually present in the context above? ...
     Reply with exactly one word first: "faithful" or "unfaithful", then a one-line reason."""
-    response=client.chat.completion.create(
+    response=client.chat.completions.create(
          model="openai/gpt-oss-120b",
     messages=[{"role": "user", "content": judge_prompt}]
     )
-
+    return  response.choices[0].message.content
+      
+    
 def search_docs(query: str, collection_hash: str):
     embed = embedding(query)
     response = Get_Answer(embed, collection_hash)
@@ -146,7 +162,7 @@ async def  run_agent(question: str, collection_hash: str):
                         "content": result_text,
                     })
                 elif tool_call.function.name=="web_search":
-                    result=await Web_search(args["query"])
+                    result= Web_search(args["query"])
                     result_text=result
                     messages.append({
                      "role":"tool",
@@ -158,7 +174,7 @@ async def  run_agent(question: str, collection_hash: str):
         else:
             return ({"answer":message.content,"context":retrieved_chunk})
             
-    return "Sorry, I couldn't find a complete answer."
+    return {"answer": "Sorry, I couldn't find a complete answer.", "context": retrieved_chunk}
 
 
 @app.post("/uploadfile/")
@@ -174,11 +190,12 @@ async def create_upload_file(file: UploadFile):
 @app.post("/ask")
 async def ask(payload: askRequest):
     try:
-        answer=await run_agent(payload.question,payload.hash)
+        answer=await get_answer(payload.question,payload.hash)
         return {"Response": answer}
         
        
-    except:
-        raise HTTPException(status_code=404, detail="Document not found")
+    except Exception as e:
+        print("REAL ERROR:", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
